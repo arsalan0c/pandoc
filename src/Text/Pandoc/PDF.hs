@@ -84,7 +84,7 @@ makePDF :: (PandocMonad m, MonadIO m, MonadMask m)
 makePDF program pdfargs writer opts doc =
   case takeBaseName program of
     "wkhtmltopdf" -> makeWithWkhtmltopdf program pdfargs writer opts doc
-    prog | prog `elem` ["pagedjs-cli" ,"weasyprint", "prince"] -> do
+    prog | prog `elem` ["pagedjs-cli" ,"weasyprint", "prince", "chrome"] -> do
       source <- writer opts doc
       verbosity <- getVerbosity
       liftIO $ html2pdf verbosity program pdfargs source
@@ -449,14 +449,21 @@ html2pdf verbosity program args source =
       BS.writeFile file $ UTF8.fromText source
       let pdfFileArgName = ["-o" | takeBaseName program `elem`
                                    ["pagedjs-cli", "prince"]]
-      let programArgs = args ++ [file] ++ pdfFileArgName ++ [pdfFile]
+          pdfFile2
+            | takeBaseName program == "chrome" = "--print-to-pdf=" <> pdfFile
+            | otherwise = pdfFile
+          program2
+            | takeBaseName program == "chrome" = "chrome"
+            | otherwise = program
+      let programArgs = args ++ [file] ++ pdfFileArgName ++ [pdfFile2]
+      print $ show $ programArgs
       env' <- getEnvironment
       when (verbosity >= INFO) $
         UTF8.readFile file >>=
-          showVerboseInfo Nothing program programArgs env'
+          showVerboseInfo Nothing program2 programArgs env'
       (exit, out) <- E.catch
-        (pipeProcess (Just env') program programArgs BL.empty)
-        (handlePDFProgramNotFound program)
+        (pipeProcess (Just env') program2 programArgs BL.empty)
+        (handlePDFProgramNotFound program2)
       when (verbosity >= INFO) $ do
         BL.hPutStr stderr out
         UTF8.hPutStr stderr "\n"
